@@ -1,0 +1,17 @@
+# Frameworks
+Django>=5.1,<6.0
+django-ninja>=1.1.0,<2.0
+django-ninja-jwt[crypto]>=5.2.0,<6.0
+
+# Tools
+django-cors-headers>=4.3.0,<5.0
+python-dotenv>=1.0.0,<2.0
+pydantic[email]>=2.6.0,<3.0
+Pillow>=10.0.0,<11.0
+django-ninja-extra>=0.15.2,<1.0.0
+
+
+# production and db stuff
+psycopg2-binary>=2.9.0,<3.0
+dj-database-url>=2.1.0,<3.0
+gunicorn>=21.2.0,<22.0

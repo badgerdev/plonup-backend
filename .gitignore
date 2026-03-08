@@ -1,0 +1,18 @@
+# Python / Virtual env
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Django
+*.sqlite3
+db.sqlite3
+media/
+
+# Środowisko (NIGDY nie wrzucaj haseł na GitHub!)
+.env
+.env.*
+
+# System
+.DS_Store
+Thumbs.db

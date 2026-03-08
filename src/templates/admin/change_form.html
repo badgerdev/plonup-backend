@@ -1,0 +1,8 @@
+{% extends "admin/change_form.html" %}
+
+{% block errors %}
+<div class="errornote" style="margin-bottom:10px;">
+    ⚠️ Nieasd można zapisać zmian — sprawdź błędy poniżej.
+</div>
+{{ block.super }}
+{% endblock %}
