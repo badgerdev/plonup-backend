@@ -1,10 +1,9 @@
 from datetime import timedelta
 from django.utils import timezone
-import json
 import secrets
-import requests
 from django.conf import settings
 from django.core import signing
+from django.core.mail import send_mail
 
 from users.models import PasswordResetToken
 
@@ -33,7 +32,7 @@ def verify_email_token(token: str, max_age_hours: int = 24):
         max_age=max_age_hours * 3600,
     )
 # -------------------------------------------------------------
-# 📬 SENDGRID — RAW API (UTF-8, bez żadnych limitów)
+# 📬 EMAIL (Django SMTP)
 # -------------------------------------------------------------
 
 
@@ -45,9 +44,9 @@ def send_verification_email(email: str, token: str):
         <p>Kliknij poniższy przycisk, aby potwierdzić swój adres e-mail:</p>
 
         <p>
-            <a 
+            <a
                 href="{verify_url}"
-                style="padding: 10px 20px; background: #ff7f00; color: white; 
+                style="padding: 10px 20px; background: #ff7f00; color: white;
                        text-decoration: none; border-radius: 8px;">
                 Potwierdź e-mail
             </a>
@@ -60,39 +59,16 @@ def send_verification_email(email: str, token: str):
         <p>Pozdrawiamy!<br>Zespół Plonup</p>
     """
 
-    payload = {
-        "personalizations": [{
-            "to": [{"email": email}]
-        }],
-        "from": {"email": settings.DEFAULT_FROM_EMAIL},
-        "subject": "Potwierdź swój adres e-mail w Plonup",
-        "content": [{
-            "type": "text/html",
-            "value": html
-        }]
-    }
-
-    # 👇 WAŻNE: JSON → UTF-8 bytes (requests nie dotyka kodowania)
-    json_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-
-    headers = {
-        "Authorization": f"Bearer {settings.SENDGRID_API_KEY}",
-        "Content-Type": "application/json",
-    }
-
     try:
-        resp = requests.post(
-            "https://api.sendgrid.com/v3/mail/send",
-            data=json_bytes,
-            headers=headers,
-            timeout=10
+        send_mail(
+            subject="Potwierdź swój adres e-mail w Plonup",
+            message=f"Potwierdź e-mail: {verify_url}",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[email],
+            html_message=html,
+            fail_silently=False,
         )
-
-        if resp.status_code >= 300:
-            print("❌ SendGrid error:", resp.status_code, resp.text)
-        else:
-            print("📨 Mail aktywacyjny wysłany do:", email)
-
+        print("📨 Mail aktywacyjny wysłany do:", email)
     except Exception as e:
         print("❌ Błąd wysyłki maila:", e)
 
@@ -117,19 +93,15 @@ def send_password_reset_email(email: str, token: str):
     <p>Link ważny 1 godzinę.</p>
     """
 
-    payload = {
-        "personalizations": [{"to": [{"email": email}]}],
-        "from": {"email": settings.DEFAULT_FROM_EMAIL},
-        "subject": "Reset hasła – Plonup",
-        "content": [{"type": "text/html", "value": html}],
-    }
-
-    requests.post(
-        "https://api.sendgrid.com/v3/mail/send",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {settings.SENDGRID_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        timeout=10,
-    )
+    try:
+        send_mail(
+            subject="Reset hasła – Plonup",
+            message=f"Reset hasła: {reset_url}",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[email],
+            html_message=html,
+            fail_silently=False,
+        )
+        print("📨 Mail resetujący hasło wysłany do:", email)
+    except Exception as e:
+        print("❌ Błąd wysyłki maila:", e)
