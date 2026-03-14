@@ -96,22 +96,73 @@ class AnnouncementAdmin(admin.ModelAdmin):
         "created_at",
     )
 
-    search_fields = ("title", "description",
-                     "user__username", "category", "location")
+    search_fields = ("title", "description", "user__username", "category", "location")
 
     date_hierarchy = "created_at"
     ordering = ("-created_at",)
-    readonly_fields = ("created_at",)
+    list_select_related = ("user",)
     inlines = [AnnouncementImageInline, AnnouncementLikeInline]
     list_per_page = 25
+
+    readonly_fields = ("visible", "editable", "submission_source", "created_at")
+
+    fieldsets = (
+        (
+            "Podstawowe",
+            {
+                "fields": (
+                    "user",
+                    "title",
+                    "description",
+                    "category",
+                    "location",
+                    "postal_code",
+                    "listing_type",
+                    "announcement_type",
+                    "created_at",
+                )
+            },
+        ),
+        (
+            "Kontakt",
+            {
+                "fields": ("email", "phone", "first_name"),
+            },
+        ),
+        (
+            "Dane firmowe",
+            {
+                "classes": ("collapse",),
+                "fields": ("company_name", "address", "opening_hours", "notes"),
+            },
+        ),
+        (
+            "Moderacja",
+            {
+                "fields": (
+                    "moderation_status",
+                    "moderation_reason",
+                    "submission_source",
+                ),
+            },
+        ),
+        (
+            "Widoczność",
+            {
+                "fields": ("status", "visible", "editable"),
+            },
+        ),
+    )
 
     # ----------------------------------------------------------
     # 🔗 Tytuł klikalny
     # ----------------------------------------------------------
     def title_link(self, obj):
-        url = f"/admin/announcements/announcement/{obj.id}/change/"
+        url = reverse("admin:announcements_announcement_change", args=[obj.id])
         return format_html(
-            f'<a href="{url}" style="font-weight:600; color:#2563eb;">{obj.title}</a>'
+            '<a href="{}" style="font-weight:600; color:#2563eb;">{}</a>',
+            url,
+            obj.title,
         )
     title_link.short_description = "Tytuł"
 
@@ -122,13 +173,15 @@ class AnnouncementAdmin(admin.ModelAdmin):
         user = obj.user
         color = "#16a34a" if user.is_verified else "#ef4444"
         label = "Zweryfikowany" if user.is_verified else "Niezweryfikowany"
-
         url = reverse("admin:users_customuser_change", args=[user.id])
-
         return format_html(
-            f'<a href="{url}" style="font-weight:600;color:#2563eb;">{user.username}</a>'
-            f'<span style="margin-left:6px;padding:2px 6px;border-radius:4px;'
-            f'background:{color};color:white;font-size:0.75em;">{label}</span>'
+            '<a href="{}" style="font-weight:600;color:#2563eb;">{}</a>'
+            '<span style="margin-left:6px;padding:2px 6px;border-radius:4px;'
+            'background:{};color:white;font-size:0.75em;">{}</span>',
+            url,
+            user.username,
+            color,
+            label,
         )
     user_with_badge.short_description = "Użytkownik"
 
@@ -139,8 +192,10 @@ class AnnouncementAdmin(admin.ModelAdmin):
         color = USER_STATUS_COLORS.get(obj.status, "#9ca3af")
         label = obj.get_status_display_label()
         return format_html(
-            f'<span style="background:{color};color:white;padding:3px 8px;'
-            f'border-radius:6px;font-size:0.8em;">{label}</span>'
+            '<span style="background:{};color:white;padding:3px 8px;'
+            'border-radius:6px;font-size:0.8em;">{}</span>',
+            color,
+            label,
         )
     personal_status.short_description = "Status użytkownika"
 
@@ -151,7 +206,9 @@ class AnnouncementAdmin(admin.ModelAdmin):
         color = MODERATION_COLORS.get(obj.moderation_status, "#9ca3af")
         label = obj.get_moderation_status_display()
         return format_html(
-            f'<span style="background:{color};color:white;padding:3px 8px;'
-            f'border-radius:6px;font-size:0.8em;">{label}</span>'
+            '<span style="background:{};color:white;padding:3px 8px;'
+            'border-radius:6px;font-size:0.8em;">{}</span>',
+            color,
+            label,
         )
     moderation_status_colored.short_description = "Status moderacji"

@@ -14,6 +14,8 @@ class NotificationAdmin(admin.ModelAdmin):
     )
     list_filter = ("type", "is_read", "is_staff_message", "created_at")
     search_fields = ("title", "message", "user__username")
+    ordering = ["-created_at"]
+    list_select_related = ("user", "created_by")
 
     fieldsets = (
         (None, {
