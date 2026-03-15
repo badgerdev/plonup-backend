@@ -14,19 +14,21 @@ def haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return R * 2 * math.asin(math.sqrt(a))
 
 
-def geocode_city(city_name: str) -> Optional[Tuple[float, float]]:
+def geocode_city(city_name: str, postal_code: str = "") -> Optional[Tuple[float, float]]:
     """
     Returns (lat, lng) for a Polish city name.
 
-    Disambiguation strategy: when multiple places share a name, prefer by
-    feature_code priority: PPLC > PPLA > PPLA2 > PPLA3 > PPLA4 > PPL.
-    This ensures e.g. "Zielona Góra" (PPLA - province capital) wins over
-    a small village of the same name.
+    Disambiguation strategy:
+    1. Prefer by feature_code priority: PPLC > PPLA > PPLA2 > PPLA3 > PPLA4 > PPL
+    2. When multiple PPL candidates share a name, pick the one with the highest
+       population — this correctly resolves ambiguous village names (e.g. "Iłowa"
+       near Żagań vs small hamlets with the same name elsewhere).
     """
     from polish_cities.models import PolishCity
 
     candidates = list(
-        PolishCity.objects.filter(name__iexact=city_name).values("lat", "lng", "feature_code")
+        PolishCity.objects.filter(name__iexact=city_name)
+        .values("lat", "lng", "feature_code", "population")
     )
     if not candidates:
         return None
@@ -34,7 +36,10 @@ def geocode_city(city_name: str) -> Optional[Tuple[float, float]]:
     for code in FEATURE_CODE_PRIORITY:
         matches = [c for c in candidates if c["feature_code"] == code]
         if matches:
-            return (matches[0]["lat"], matches[0]["lng"])
+            # Among same feature_code, prefer highest population
+            best = max(matches, key=lambda c: c["population"] or 0)
+            return (best["lat"], best["lng"])
 
-    # Fallback: first record
-    return (candidates[0]["lat"], candidates[0]["lng"])
+    # Fallback: highest population overall
+    best = max(candidates, key=lambda c: c["population"] or 0)
+    return (best["lat"], best["lng"])

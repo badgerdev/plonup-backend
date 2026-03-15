@@ -6,6 +6,9 @@ class PolishCity(models.Model):
     lat = models.FloatField()
     lng = models.FloatField()
     feature_code = models.CharField(max_length=10, default="PPL")
+    population = models.IntegerField(null=True, default=None)
+    admin1 = models.CharField(max_length=100, blank=True, db_index=True)
+    postal_code = models.CharField(max_length=10, blank=True, db_index=True)
 
     class Meta:
         ordering = ["name"]

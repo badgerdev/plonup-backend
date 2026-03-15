@@ -129,7 +129,7 @@ class AnnouncementController(ControllerBase):
             type="moderation"
         )
 
-        coords = geocode_city(ann.location)
+        coords = geocode_city(ann.location, ann.postal_code or "")
         if coords:
             ann.lat, ann.lng = coords
             ann.save(update_fields=["lat", "lng"])
@@ -347,15 +347,24 @@ class AnnouncementController(ControllerBase):
     @route.get("/nearby", auth=None)
     def nearby_announcements(
         self,
-        city: str,
+        city: str = "",
+        lat: Optional[float] = None,
+        lng: Optional[float] = None,
         radius_km: float = 50.0,
         category: Optional[str] = None,
+        type: Optional[str] = None,
     ):
-        coords = geocode_city(city)
-        if coords is None:
-            return {"error": "Nie znaleziono miasta", "in_city": [], "nearby": []}
+        user = get_user_from_request(self.context.request)
 
-        city_lat, city_lng = coords
+        if lat is not None and lng is not None:
+            city_lat, city_lng = lat, lng
+        elif city:
+            coords = geocode_city(city)
+            if coords is None:
+                return {"error": "Nie znaleziono miasta", "in_city": [], "nearby": [], "city_info": None}
+            city_lat, city_lng = coords
+        else:
+            return {"error": "Podaj city lub lat/lng", "in_city": [], "nearby": [], "city_info": None}
 
         qs = (
             Announcement.objects
@@ -364,9 +373,22 @@ class AnnouncementController(ControllerBase):
             .exclude(lng=None)
             .select_related("user")
             .prefetch_related("images")
+            .annotate(likes_count=Count("likes", distinct=True))
         )
+
+        if user.is_authenticated:
+            qs = qs.annotate(
+                is_liked=Exists(
+                    AnnouncementLike.objects.filter(
+                        announcement_id=OuterRef("pk"), user=user
+                    )
+                )
+            )
+
         if category:
             qs = qs.filter(category=category)
+        if type:
+            qs = qs.filter(announcement_type=type)
 
         in_city = []
         nearby = []
@@ -374,14 +396,20 @@ class AnnouncementController(ControllerBase):
         for ann in qs:
             dist = haversine(city_lat, city_lng, ann.lat, ann.lng)
             if dist <= radius_km:
-                entry = {
-                    "id": ann.id,
-                    "title": ann.title,
-                    "category": ann.category,
-                    "location": ann.location,
-                    "listing_type": ann.listing_type,
-                    "distance_km": round(dist, 1),
-                }
+                serialized = AnnouncementOutSchema.model_validate(
+                    {
+                        **ann.__dict__,
+                        "images": list(ann.images.all()),
+                        "user": ann.user.username,
+                        "user_id": ann.user_id,
+                        "status_display": ann.get_status_display_label(),
+                        "likes_count": ann.likes_count,
+                        "is_liked": getattr(ann, "is_liked", False),
+                    },
+                    from_attributes=True,
+                )
+                entry = {**serialized.model_dump(), "distance_km": round(dist, 1)}
+
                 if dist <= 5.0:
                     in_city.append(entry)
                 else:
@@ -390,11 +418,33 @@ class AnnouncementController(ControllerBase):
         in_city.sort(key=lambda x: x["distance_km"])
         nearby.sort(key=lambda x: x["distance_km"])
 
+        # Grupuj nearby wg nazwy miejscowości
+        nearby_city_map = {}
+        for entry in nearby:
+            name = entry["location"]
+            if name not in nearby_city_map:
+                nearby_city_map[name] = {"count": 0, "min_dist": entry["distance_km"]}
+            nearby_city_map[name]["count"] += 1
+            if entry["distance_km"] < nearby_city_map[name]["min_dist"]:
+                nearby_city_map[name]["min_dist"] = entry["distance_km"]
+
+        nearby_cities = sorted(
+            [{"name": k, "distance_km": v["min_dist"], "count": v["count"]}
+             for k, v in nearby_city_map.items()],
+            key=lambda x: x["distance_km"]
+        )
+
         return {
             "searched_city": city,
             "radius_km": radius_km,
             "in_city": in_city,
             "nearby": nearby,
+            "city_info": {
+                "searched_city": city,
+                "radius_km": radius_km,
+                "in_city_count": len(in_city),
+                "nearby_cities": nearby_cities,
+            },
         }
 
     @route.get("/{announcement_id}", auth=None)
