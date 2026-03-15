@@ -52,6 +52,10 @@ class Announcement(models.Model):
     visible = models.BooleanField(default=False)
     editable = models.BooleanField(default=False)
 
+    # Geolokalizacja
+    lat = models.FloatField(null=True, blank=True)
+    lng = models.FloatField(null=True, blank=True)
+
     class Meta:
         ordering = ["-created_at"]
         indexes = [

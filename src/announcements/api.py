@@ -31,6 +31,7 @@ from utils.ensure_account_not_pending_deletion import (
 )
 
 
+from announcements.geocoding import geocode_city, haversine
 from announcements.schemas import (
     AnnouncementCreateWithImagesSchema,
     AnnouncementOutSchema,
@@ -128,6 +129,11 @@ class AnnouncementController(ControllerBase):
             type="moderation"
         )
 
+        coords = geocode_city(ann.location)
+        if coords:
+            ann.lat, ann.lng = coords
+            ann.save(update_fields=["lat", "lng"])
+
         return {
             "id": ann.id,
             "moderation_status": moderation_status,
@@ -197,13 +203,6 @@ class AnnouncementController(ControllerBase):
             )
             for a in announcements
         ]
-
-    @route.get("/locations", auth=None)
-    def get_locations(self):
-        return list(
-            Announcement.objects.values_list(
-                "location", flat=True).distinct().order_by("location")
-        )
 
     @route.get("/my-announcements", auth=JWTAuthWithTokenVersion())
     def my_announcements(
@@ -344,6 +343,59 @@ class AnnouncementController(ControllerBase):
             )
             for a in related
         ]
+
+    @route.get("/nearby", auth=None)
+    def nearby_announcements(
+        self,
+        city: str,
+        radius_km: float = 50.0,
+        category: Optional[str] = None,
+    ):
+        coords = geocode_city(city)
+        if coords is None:
+            return {"error": "Nie znaleziono miasta", "in_city": [], "nearby": []}
+
+        city_lat, city_lng = coords
+
+        qs = (
+            Announcement.objects
+            .filter(status="active", moderation_status=APPROVED)
+            .exclude(lat=None)
+            .exclude(lng=None)
+            .select_related("user")
+            .prefetch_related("images")
+        )
+        if category:
+            qs = qs.filter(category=category)
+
+        in_city = []
+        nearby = []
+
+        for ann in qs:
+            dist = haversine(city_lat, city_lng, ann.lat, ann.lng)
+            if dist <= radius_km:
+                entry = {
+                    "id": ann.id,
+                    "title": ann.title,
+                    "category": ann.category,
+                    "location": ann.location,
+                    "listing_type": ann.listing_type,
+                    "distance_km": round(dist, 1),
+                }
+                if dist <= 5.0:
+                    in_city.append(entry)
+                else:
+                    nearby.append(entry)
+
+        in_city.sort(key=lambda x: x["distance_km"])
+        nearby.sort(key=lambda x: x["distance_km"])
+
+        return {
+            "searched_city": city,
+            "radius_km": radius_km,
+            "in_city": in_city,
+            "nearby": nearby,
+        }
 
     @route.get("/{announcement_id}", auth=None)
     def get_public_announcement(self, announcement_id: int = Path(...)):

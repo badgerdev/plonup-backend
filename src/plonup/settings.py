@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "users",
     "moderation.apps.ModerationConfig",
     "notifications",
+    "polish_cities",
 ]
 
 MIDDLEWARE = [
